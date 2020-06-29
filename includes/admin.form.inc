@@ -1620,6 +1620,7 @@ function _mods_id($field = NULL, $mods_value = NULL, $pid = NULL) {
       $mods_doc->loadXML($object['MODS']->content);
       $mods_xpath = new DOMXPath($mods_doc);
       $mods_xpath->registerNamespace('m', 'http://www.loc.gov/mods/v3');
+      $mods_xpath->registerNamespace('mods', 'http://www.loc.gov/mods/v3');
       $lookup_results = $mods_xpath->query($mods_value);
       $build_string = '';
 
