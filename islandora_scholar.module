@@ -232,6 +232,22 @@ function islandora_scholar_islandora_required_objects(IslandoraTuque $connection
 /**
  * Implements hook_CMODEL_PID_islandora_view_object().
  */
+function islandora_scholar_islandora_compoundCModel_islandora_view_object($object) {
+  if (variable_get('islandora_scholar_google_scholar_metatags_enabled', TRUE)) {
+    module_load_include('inc', 'islandora_scholar', 'includes/google_scholar');
+    module_load_include('module', 'islandora_compound_object');
+    $tags = islandora_scholar_create_meta_tags($object);
+    $parts = islandora_compound_object_get_parts($object->id);
+    foreach ($parts as $partid) {
+      $tags['citation_pdf_url'] = url('islandora/object/' . $partid . '/datastream/PDF/download', array('absolute' => TRUE));
+    }
+    islandora_scholar_embed_tags($tags);
+  }
+  return array();  
+}
+/**
+ * Implements hook_CMODEL_PID_islandora_view_object().
+ */
 function islandora_scholar_ir_citationCModel_islandora_view_object($object) {
   module_load_include('inc', 'islandora_scholar', 'includes/utilities');
   if (variable_get('islandora_scholar_google_scholar_metatags_enabled', TRUE)) {
