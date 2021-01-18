@@ -18,7 +18,7 @@
  */
 function islandora_scholar_create_meta_tags($object) {
   // Need at least title, full name of at least one author, publication year.
-  if (!isset($object['MODS']) || !islandora_datastream_access(ISLANDORA_VIEW_OBJECTS, $object['MODS'])) {
+  if (!isset($object['MODS'])) {
     return FALSE;
   }
   else {
@@ -42,7 +42,7 @@ function islandora_scholar_create_meta_tags($object) {
       }
     }
     else {
-      return FALSE;
+      $tags['citation_title'] = 'No title';
     }
     $authorsxpath = variable_get('islandora_scholar_xpaths_authors_xpath', '//mods:mods[1]/mods:name/mods:role[mods:roleTerm = "author"]/..');
     foreach ($mods_xml->xpath($authorsxpath) as $name_xml) {
@@ -87,7 +87,7 @@ function islandora_scholar_create_meta_tags($object) {
       }
     }
     if (count($tags['citation_author']) == 0) {
-      return FALSE;
+      $tags['error'] = 'author'; // return FALSE;
     }
 
     $origin_date = $mods_xml->xpath(variable_get('islandora_scholar_xpaths_origin_date', '//mods:originInfo/mods:dateIssued'));
@@ -95,6 +95,7 @@ function islandora_scholar_create_meta_tags($object) {
     $related_date = $mods_xml->xpath(variable_get('islandora_scholar_xpaths_related_date', '//mods:relatedItem[@type="host"]//mods:date'));
     $created_date = $mods_xml->xpath(variable_get('islandora_scholar_xpaths_created_date', '//mods:originInfo/mods:dateCreated'));
 
+    $date = NULL;
     if ($origin_date) {
       $date = (string) reset($origin_date);
     }
@@ -108,7 +109,7 @@ function islandora_scholar_create_meta_tags($object) {
       $date = (string) reset($created_date);
     }
     else {
-      return FALSE;
+      $tags['error'] = 'date 1'; // return FALSE;
     }
 
     // Google requires dates in yyyy/mm/dd format or just the year. As dates suck
@@ -126,26 +127,48 @@ function islandora_scholar_create_meta_tags($object) {
       }
     }
 
-    $host_title = $mods_xml->xpath(variable_get('islandora_scholar_xpaths_host_title', '//mods:relatedItem[@type="host"]//mods:title'));
     $genre = $mods_xml->xpath(variable_get('islandora_scholar_xpaths_genre', '//mods:mods[1]/mods:genre'));
 
     $genre = strtolower((string) reset($genre));
+    $host_title = '';
+
     switch ($genre) {
-      case 'book section':
-      case 'book chapter':
-        $host_tag = 'citation_book_title';
+      case 'info:eu-repo/semantics/article': // Article / Letter to editor
+      case 'info:eu-repo/semantics/bookPart': // Part of book or chapter of book
+        $tmp_title = $mods_xml->xpath(variable_get('islandora_scholar_xpaths_host_title', '//mods:relatedItem[@type="host"]//mods:title'));
+        if ($tmp_title) {
+          $tags['citation_book_title'] = (string) reset($tmp_title);
+        }
+        // No break for a reason!
+      case 'info:eu-repo/semantics/other': // Abstract, Event
+      case 'info:eu-repo/semantics/annotation': // Annotation
+      case 'info:eu-repo/semantics/bookreview': // Book review
+      case 'info:eu-repo/semantics/workingpaper': // Research Paper 
+        $host_title = $mods_xml->xpath(variable_get('islandora_scholar_xpaths_host_title', '//mods:relatedItem[@type="host"]//mods:title'));
+        $host_tag = 'citation_journal_title';
         break;
 
-      case 'conference proceeding':
-        $host_tag = 'citation_conference_title';
+      case 'info:eu-repo/semantics/book': // Book, Book editorial
+      case 'info:eu-repo/semantics/report': // External research report
+        $tags['citation_book_title'] = $tags['citation_title'];
+        break;
+
+     case 'info:eu-repo/semantics/doctoralThesis':
+        $tags['citation_dissertation_name'] = 'PhD';
         break;
 
       default:
-        $host_tag = 'citation_journal_title';
+        $host_title = $mods_xml->xpath(variable_get('islandora_scholar_xpaths_host_title', '//mods:relatedItem[@type="host"]//mods:title'));
+        $host_tag = 'citation_book_title';
         break;
     }
     if ($host_title) {
       $tags[$host_tag] = (string) reset($host_title);
+    }
+
+    $conference_title = $mods_xml->xpath("//mods:name[@type='conference']/mods:namePart[not(@type)]");
+    if ($conference_title) {
+      $tags['citation_conference_title'] = (string) reset($conference_title);
     }
 
     $volume = $mods_xml->xpath(variable_get('islandora_scholar_xpaths_volume', '//mods:mods[1]/mods:part/mods:detail[@type="volume"]/mods:number'));
@@ -161,9 +184,9 @@ function islandora_scholar_create_meta_tags($object) {
           (string) reset($issn));
     }
 
-    $isbn = $mods_xml->xpath(variable_get('islandora_scholar_xpaths_isbn', '//mods:identifier[@type="isbn"]'));
-    if ($isbn) {
-      $tags['citation_isbn'] = (string) reset($isbn);
+    $isbns = $mods_xml->xpath(variable_get('islandora_scholar_xpaths_isbn', '//mods:identifier[@type="isbn" or @type="eisbn"]'));
+    if ($isbns) {
+      $tags['citation_isbn'] = array_map(function($isbn) { return (string)$isbn; }, $isbns);
     }
 
     $issue = $mods_xml->xpath(variable_get('islandora_scholar_xpaths_issue', '//mods:mods[1]/mods:part/mods:detail[@type="issue"]/mods:number'));
@@ -183,7 +206,8 @@ function islandora_scholar_create_meta_tags($object) {
 
     $online_date = $mods_xml->xpath(variable_get('islandora_scholar_xpaths_online_date', '//mods:recordInfo/mods:recordCreationDate'));
     if ($online_date) {
-      $date_string = islandora_scholar_parse_date_foryear($online_date);
+      $date = (string) reset($online_date);
+      $date_string = islandora_scholar_parse_date_foryear($date);
       if ($date_string) {
         $tags['citation_online_date'] = $date_string;
       }
@@ -194,12 +218,85 @@ function islandora_scholar_create_meta_tags($object) {
       $tags['citation_doi'] = (string) reset($doi);
     }
 
+    $handle = $mods_xml->xpath('/mods:mods/mods:identifier[@type="hdl"]');
+    if ($handle) {
+      $tags['citation_public_url'] = (string) reset($handle);
+    }
+
+    $language = $mods_xml->xpath('/mods:mods/mods:language/mods:languageTerm[@type="code"]');
+    if ($language) {
+      $tags['citation_language'] = (string) reset($language);
+    }
+
+    $patent = $mods_xml->xpath('/mods:mods/mods:note[@type="patentNumber"]');
+    if ($patent) {
+      $tags['citation_patent'] = (string) reset($patent);
+      $tags['citation_patent_number'] = $tags['citation_patent'];
+    }
+
+    $seriestitle = $mods_xml->xpath(variable_get('islandora_scholar_xpaths_collection-title', ''));
+    if ($seriestitle) {
+      $tags['citation_series_title'] = (string) reset($seriestitle);
+    }
+
+    $publisher = $mods_xml->xpath(variable_get('islandora_scholar_xpaths_publisher', ''));
+    if ($publisher) {
+      $publisher = array_map(function($pub) { return (string)$pub; }, $publisher);
+      $tags['citation_publisher'] = $publisher;
+    }
+
+    $abstract = $mods_xml->xpath(variable_get('islandora_scholar_xpaths_abstract', ''));
+    if ($abstract) {
+      $tags['citation_abstract'] = array_map(function($a) { return strip_tags((string)$a); }, $abstract);
+    }
+
     $degree_grantor = $mods_xml->xpath(variable_get('islandora_scholar_xpaths_degree_grantor', '//mods:mods/mods:name[@type="corporate"][mods:role/mods:roleTerm = "Degree grantor"]/mods:namePart'));
     if ($degree_grantor) {
       $tags['citation_dissertation_institution'] = (string) reset($degree_grantor);
     }
 
-    if ($object['PDF']) {
+    $genre = $mods_xml->xpath('//mods:genre[@authority="local"])
+
+    if (in_array('islandora:compoundCModel', $object->models)) {
+      module_load_include('inc', 'islandora_solr', 'includes/utilities');
+      $qp = new IslandoraSolrQueryProcessor();
+      $usedsolrfields = array('mods_accessCondition_type_custom_ms', 'mods_originInfo_encoding_w3cdtf_type_embargo_dateOther_mdt', 'PID');
+      $parent_id = islandora_solr_lesser_escape($object->id);
+      $relcomp = variable_get('islandora_solr_compound_relationship_field', 'RELS_EXT_isConstituentOf_uri_ms');
+      $query = "$relcomp:($parent_id) OR $relcomp:(" . islandora_solr_lesser_escape('info:fedora/') . "$parent_id)";
+      $qp->buildQuery("*:*");
+      $qp->solrStart = 0;
+      $qp->solrLimit = 100;
+      $qp->solrParams['facet'] = 'false';
+      $qp->solrParams['fq'] = array($query);
+      $qp->solrParams['fl'] = implode(',', $usedsolrfields);
+      $qp->executeQuery(FALSE);
+
+      if (isset($qp->islandoraSolrResult['response']['numFound']) && $qp->islandoraSolrResult['response']['numFound'] > 0) {
+        $today = date("Y-m-d");
+        foreach ($qp->islandoraSolrResult['response']['objects'] as $solrobj) {
+          if (isset($solrobj['solr_doc']['mods_accessCondition_type_custom_ms'])) {
+            $add = FALSE;
+            if (in_array('info:eu-repo/semantics/openAccess', $solrobj['solr_doc']['mods_accessCondition_type_custom_ms'])) {
+              $add = TRUE;
+            }
+            elseif (in_array('info:eu-repo/semantics/embargoedAccess', $solrobj['solr_doc']['mods_accessCondition_type_custom_ms'])) {
+              if (isset($solrobj['solr_doc']['mods_originInfo_encoding_w3cdtf_type_embargo_dateOther_mdt'][0])) {
+                $date = $solrobj['solr_doc']['mods_originInfo_encoding_w3cdtf_type_embargo_dateOther_mdt'][0];
+                if (strcmp($date, $today) < 0) {
+                  $add = TRUE;
+                } 
+              }
+            }
+            if ($add) {
+              $cid = $solrobj['PID'];
+              $tags['citation_pdf_url'][] = url("access/$cid/view", array('absolute' => TRUE));
+            }
+          }
+        }
+      }
+    }
+    else if ($object['PDF']) {
       $tags['citation_pdf_url'] = url("islandora/object/$object->id/datastream/PDF/view", array('absolute' => TRUE));
     }
 
@@ -239,8 +336,9 @@ function islandora_scholar_parse_date_foryear($date) {
     return $datetime->format('Y');
   }
   else {
+    // Date does not appear to be in a format we know of. Return it just in case.
     // TODO: should we log this?
-    return NULL;
+    return $date;
   }
 }
 
