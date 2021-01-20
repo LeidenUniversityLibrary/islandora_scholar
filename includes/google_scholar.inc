@@ -153,7 +153,7 @@ function islandora_scholar_create_meta_tags($object) {
         $tags['citation_book_title'] = $tags['citation_title'];
         break;
 
-     case 'info:eu-repo/semantics/doctoralThesis':
+     case 'info:eu-repo/semantics/doctoralthesis':
         $tags['citation_dissertation_name'] = 'PhD';
         break;
 
@@ -209,7 +209,7 @@ function islandora_scholar_create_meta_tags($object) {
       $date = (string) reset($online_date);
       $date_string = islandora_scholar_parse_date_foryear($date);
       if ($date_string) {
-        $tags['citation_online_date'] = $date_string;
+        // $tags['citation_online_date'] = $date_string;
       }
     }
 
@@ -234,18 +234,18 @@ function islandora_scholar_create_meta_tags($object) {
       $tags['citation_patent_number'] = $tags['citation_patent'];
     }
 
-    $seriestitle = $mods_xml->xpath(variable_get('islandora_scholar_xpaths_collection-title', ''));
+    $seriestitle = $mods_xml->xpath(variable_get('islandora_scholar_xpaths_collection-title', '/mods:nothing'));
     if ($seriestitle) {
       $tags['citation_series_title'] = (string) reset($seriestitle);
     }
 
-    $publisher = $mods_xml->xpath(variable_get('islandora_scholar_xpaths_publisher', ''));
+    $publisher = $mods_xml->xpath(variable_get('islandora_scholar_xpaths_publisher', '/mods:nothing'));
     if ($publisher) {
       $publisher = array_map(function($pub) { return (string)$pub; }, $publisher);
       $tags['citation_publisher'] = $publisher;
     }
 
-    $abstract = $mods_xml->xpath(variable_get('islandora_scholar_xpaths_abstract', ''));
+    $abstract = $mods_xml->xpath(variable_get('islandora_scholar_xpaths_abstract', '/mods:nothing'));
     if ($abstract) {
       $tags['citation_abstract'] = array_map(function($a) { return strip_tags((string)$a); }, $abstract);
     }
@@ -255,7 +255,10 @@ function islandora_scholar_create_meta_tags($object) {
       $tags['citation_dissertation_institution'] = (string) reset($degree_grantor);
     }
 
-    $genre = $mods_xml->xpath('//mods:genre[@authority="local"])
+    $keywords = $mods_xml->xpath('//mods:subject/mods:topic');
+    if ($keywords) {
+      $tags['citation_keywords'] = array_map(function($kw) { return strip_tags((string)$kw); }, $keywords);
+    }
 
     if (in_array('islandora:compoundCModel', $object->models)) {
       module_load_include('inc', 'islandora_solr', 'includes/utilities');
@@ -296,7 +299,7 @@ function islandora_scholar_create_meta_tags($object) {
         }
       }
     }
-    else if ($object['PDF']) {
+    else if (isset($object['PDF'])) {
       $tags['citation_pdf_url'] = url("islandora/object/$object->id/datastream/PDF/view", array('absolute' => TRUE));
     }
 

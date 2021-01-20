@@ -237,10 +237,6 @@ function islandora_scholar_islandora_compoundCModel_islandora_view_object($objec
     module_load_include('inc', 'islandora_scholar', 'includes/google_scholar');
     module_load_include('module', 'islandora_compound_object');
     $tags = islandora_scholar_create_meta_tags($object);
-    $parts = islandora_compound_object_get_parts($object->id);
-    foreach ($parts as $partid) {
-      $tags['citation_pdf_url'] = url('islandora/object/' . $partid . '/datastream/PDF/download', array('absolute' => TRUE));
-    }
     islandora_scholar_embed_tags($tags);
   }
   return array();  
